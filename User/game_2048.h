@@ -14,7 +14,7 @@ typedef enum
 typedef enum
 {
     GAME2048_STATE_PLAYING = 0,          // Board accepts direction moves.
-    GAME2048_STATE_WIN,                  // A 2048 tile has been reached.
+    GAME2048_STATE_WIN,                  // The active goal tile has been reached.
     GAME2048_STATE_OVER                  // No empty cells or legal merges remain.
 } Game2048_State;
 
@@ -29,6 +29,7 @@ uint8_t Game2048_IsWin(void);
 uint8_t Game2048_IsOver(void);
 uint32_t Game2048_GetScore(void);
 uint32_t Game2048_GetBestScore(void);
+uint32_t Game2048_GetMoveCount(void);
 uint16_t Game2048_GetLastChangeMask(void);
 uint16_t Game2048_GetLastNewTileMask(void);
 uint16_t Game2048_GetLastMergeMask(void);

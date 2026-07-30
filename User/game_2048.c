@@ -9,6 +9,7 @@
 static uint8_t g_game2048_board[GAME2048_SIZE][GAME2048_SIZE];
 static uint32_t g_game2048_score = 0U;
 static uint32_t g_game2048_best_score = 0U;
+static uint32_t g_game2048_move_count = 0U;
 static uint32_t g_game2048_rng_state = 1U;
 static uint16_t g_game2048_last_change_mask = 0U;
 static uint16_t g_game2048_last_new_tile_mask = 0U;
@@ -51,7 +52,7 @@ static uint32_t Game2048_Rand(void)
  * None.
  *
  * Side effects:
- * Clears the board, score, and state.
+ * Clears the board, score, move count, and state.
  */
 static void Game2048_ClearBoard(void)
 {
@@ -67,6 +68,7 @@ static void Game2048_ClearBoard(void)
     }
 
     g_game2048_score = 0U;
+    g_game2048_move_count = 0U;
     g_game2048_state = GAME2048_STATE_PLAYING;
 }
 
@@ -178,8 +180,8 @@ static uint8_t Game2048_AddRandomTile(uint8_t track_new_tile)
  * None.
  *
  * Return value:
- * 1: At least one 2048 tile is present.
- * 0: No winning tile exists.
+ * 1: At least one tile reaches the active goal.
+ * 0: No goal tile exists.
  *
  * Side effects:
  * None.
@@ -575,7 +577,7 @@ static uint16_t Game2048_WriteLine(
  * None.
  *
  * Side effects:
- * Resets board, score, best score, state, and RNG state.
+ * Resets board, score, move count, best score, state, and RNG state.
  */
 void Game2048_Init(uint32_t seed)
 {
@@ -598,7 +600,7 @@ void Game2048_Init(uint32_t seed)
  * None.
  *
  * Side effects:
- * Resets board, score, state, and RNG state.
+ * Resets board, score, move count, state, and RNG state.
  */
 void Game2048_Restart(uint32_t seed)
 {
@@ -632,7 +634,7 @@ void Game2048_Restart(uint32_t seed)
  * 0: The board did not change or the game is not accepting moves.
  *
  * Side effects:
- * May update board cells, score, best score, state, and RNG state.
+ * May update board cells, score, move count, best score, state, and RNG state.
  */
 uint8_t Game2048_Move(Game2048_Direction dir)
 {
@@ -680,6 +682,7 @@ uint8_t Game2048_Move(Game2048_Direction dir)
     }
 
     g_game2048_score += score_delta;
+    g_game2048_move_count++;
     if (g_game2048_score > g_game2048_best_score)
     {
         g_game2048_best_score = g_game2048_score;
@@ -840,6 +843,26 @@ uint32_t Game2048_GetScore(void)
 uint32_t Game2048_GetBestScore(void)
 {
     return g_game2048_best_score;
+}
+
+/*
+ * Read the accepted move count for the current board.
+ *
+ * Only successful direction moves increment this counter. Invalid direction
+ * attempts, pause navigation, and restarts do not count as moves.
+ *
+ * Parameters:
+ * None.
+ *
+ * Return value:
+ * Number of valid board moves since the last restart.
+ *
+ * Side effects:
+ * None.
+ */
+uint32_t Game2048_GetMoveCount(void)
+{
+    return g_game2048_move_count;
 }
 
 /*

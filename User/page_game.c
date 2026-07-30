@@ -479,7 +479,7 @@ static uint16_t Page_Game_GetTileColor(uint8_t exponent)
 }
 
 /*
- * Draw the goal, score, and best-score header.
+ * Draw the goal, move count, score, and best-score header.
  *
  * Parameters:
  * None.
@@ -488,24 +488,28 @@ static uint16_t Page_Game_GetTileColor(uint8_t exponent)
  * None.
  *
  * Side effects:
- * Repaints the status bar and score text.
+ * Repaints the status bar and compact game counters.
  */
 static void Page_Game_DrawHeader(void)
 {
     char title_text[6];
+    char move_text[11];
     char score_text[11];
     char best_text[11];
 
     title_text[0] = 'G';
     Page_Game_FormatU32(Game2048_GetGoalValue(), &title_text[1], 5U);
+    Page_Game_FormatU32(Game2048_GetMoveCount(), move_text, (uint8_t)sizeof(move_text));
     Page_Game_FormatU32(Game2048_GetScore(), score_text, (uint8_t)sizeof(score_text));
     Page_Game_FormatU32(Game2048_GetBestScore(), best_text, (uint8_t)sizeof(best_text));
 
     UI_DrawStatusBar(title_text, UI_COLOR_ACCENT);
-    UI_DrawText(74, 6, "S", UI_COLOR_BG);
-    UI_DrawText(90, 6, score_text, UI_COLOR_BG);
-    UI_DrawText(150, 6, "B", UI_COLOR_BG);
-    UI_DrawText(166, 6, best_text, UI_COLOR_BG);
+    UI_DrawText(66, 6, "M", UI_COLOR_BG);
+    UI_DrawText(80, 6, move_text, UI_COLOR_BG);
+    UI_DrawText(120, 6, "S", UI_COLOR_BG);
+    UI_DrawText(134, 6, score_text, UI_COLOR_BG);
+    UI_DrawText(178, 6, "B", UI_COLOR_BG);
+    UI_DrawText(192, 6, best_text, UI_COLOR_BG);
 }
 
 /*
@@ -760,6 +764,7 @@ static void Page_Game_OnEvent(const UI_Event *event)
     Game2048_Direction dir;
     uint32_t score_before;
     uint32_t best_before;
+    uint32_t move_count_before;
     uint16_t old_merge_flash_mask;
     uint16_t old_new_flash_mask;
     uint16_t redraw_mask;
@@ -831,6 +836,7 @@ static void Page_Game_OnEvent(const UI_Event *event)
     g_page_game_last_input_ms = event->timestamp;
     score_before = Game2048_GetScore();
     best_before = Game2048_GetBestScore();
+    move_count_before = Game2048_GetMoveCount();
     if (Game2048_Move(dir) != 0U)
     {
         g_page_game_input_locked = 1U;
@@ -843,7 +849,8 @@ static void Page_Game_OnEvent(const UI_Event *event)
             event->timestamp
         );
         if ((Game2048_GetScore() != score_before) ||
-            (Game2048_GetBestScore() != best_before))
+            (Game2048_GetBestScore() != best_before) ||
+            (Game2048_GetMoveCount() != move_count_before))
         {
             Page_Game_InvalidateScore();
         }
