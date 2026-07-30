@@ -3,18 +3,22 @@
 #include "timing.h"
 #include "ui_draw.h"
 #include "ui_feedback.h"
+#include "ui_renderer.h"
 
 #define PAGE_GAME_BOARD_X          32      // Board left coordinate.
 #define PAGE_GAME_BOARD_Y          34      // Board top coordinate.
 #define PAGE_GAME_CELL             39      // Tile square size.
 #define PAGE_GAME_GAP               4      // Gap between tiles.
 #define PAGE_GAME_BOARD_SIZE      176      // Full board area including gaps.
-#define PAGE_GAME_MOVE_THROTTLE    90U     // Minimum time between accepted moves.
+#define PAGE_GAME_INPUT_THROTTLE   90U     // Minimum time between direction attempts.
+#define PAGE_GAME_RESTART_GUARD   300U     // Minimum time between OK restarts.
 #define TEXT_GAME_TITLE          "2048"
 #define TEXT_FOOTER_GAME         "JOY MOVE  OK NEW  RST BACK"
 
 static uint8_t g_page_game_initialized = 0U;
-static uint32_t g_page_game_last_move_ms = 0U;
+static uint8_t g_page_game_input_locked = 0U;
+static uint32_t g_page_game_last_input_ms = 0U;
+static uint32_t g_page_game_last_restart_ms = 0U;
 static uint32_t g_page_game_draw_now = 0U;
 
 /*
@@ -435,7 +439,9 @@ static void Page_Game_DrawStateOverlay(void)
 static void Page_Game_Restart(uint32_t seed)
 {
     Game2048_Restart(seed);
-    g_page_game_last_move_ms = 0U;
+    g_page_game_last_input_ms = seed;
+    g_page_game_last_restart_ms = seed;
+    g_page_game_input_locked = 1U;
     UI_PageRequestRedraw();
 }
 
@@ -449,8 +455,8 @@ static void Page_Game_Restart(uint32_t seed)
  * None.
  *
  * Side effects:
- * Initializes the game once per power cycle and requests a redraw through the
- * page manager.
+ * Initializes the game once per power cycle and holds game input until the
+ * first GAME-page redraw has drained.
  */
 static void Page_Game_OnEnter(void)
 {
@@ -459,14 +465,17 @@ static void Page_Game_OnEnter(void)
         Game2048_Init(Timing_GetTick());
         g_page_game_initialized = 1U;
     }
+    g_page_game_input_locked = 1U;
 }
 
 /*
  * Handle one GAME page event.
  *
  * Direction keys slide the board with a small throttle so key repeats cannot
- * flood the dirty queue. OK restarts the game. RST/BACK remains handled by the
- * global page manager before this function is called.
+ * flood the dirty queue, including attempts that do not change the board. OK
+ * accepts only the first press and locks further input until the restart redraw
+ * drains. RST/BACK remains handled by the global page manager before this
+ * function is called.
  *
  * Parameters:
  * event: UI event after global routing.
@@ -489,6 +498,19 @@ static void Page_Game_OnEvent(const UI_Event *event)
 
     if (event->type == UI_EVENT_OK)
     {
+        if (event->source_type != KEY_EVENT_PRESS)
+        {
+            return;
+        }
+        if ((g_page_game_input_locked != 0U) || (UI_RendererIsBusy() != 0U))
+        {
+            return;
+        }
+        if ((g_page_game_last_restart_ms != 0U) &&
+            ((event->timestamp - g_page_game_last_restart_ms) < PAGE_GAME_RESTART_GUARD))
+        {
+            return;
+        }
         Page_Game_Restart(event->timestamp);
         return;
     }
@@ -521,15 +543,21 @@ static void Page_Game_OnEvent(const UI_Event *event)
         return;
     }
 
-    if ((g_page_game_last_move_ms != 0U) &&
-        ((event->timestamp - g_page_game_last_move_ms) < PAGE_GAME_MOVE_THROTTLE))
+    if ((g_page_game_input_locked != 0U) || (UI_RendererIsBusy() != 0U))
     {
         return;
     }
 
+    if ((g_page_game_last_input_ms != 0U) &&
+        ((event->timestamp - g_page_game_last_input_ms) < PAGE_GAME_INPUT_THROTTLE))
+    {
+        return;
+    }
+
+    g_page_game_last_input_ms = event->timestamp;
     if (Game2048_Move(dir) != 0U)
     {
-        g_page_game_last_move_ms = event->timestamp;
+        g_page_game_input_locked = 1U;
         Page_Game_InvalidateScore();
         Page_Game_InvalidateBoard();
     }
@@ -539,7 +567,9 @@ static void Page_Game_OnEvent(const UI_Event *event)
  * Run periodic GAME page work.
  *
  * The first version has no animation. The timestamp is cached so feedback and
- * later animation additions have a stable draw-time value available.
+ * later animation additions have a stable draw-time value available. Reaching
+ * this task means the page manager has already drained pending renderer work,
+ * so the game can safely accept the next move or restart.
  *
  * Parameters:
  * now: Current system tick.
@@ -553,6 +583,7 @@ static void Page_Game_OnEvent(const UI_Event *event)
 static void Page_Game_Task(uint32_t now)
 {
     g_page_game_draw_now = now;
+    g_page_game_input_locked = 0U;
 }
 
 /*
