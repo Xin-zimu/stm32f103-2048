@@ -12,7 +12,7 @@
 #define PAGE_GAME_BOARD_SIZE      176      // Full board area including gaps.
 #define PAGE_GAME_INPUT_THROTTLE   90U     // Minimum time between direction attempts.
 #define PAGE_GAME_RESTART_GUARD   300U     // Minimum time between OK restarts.
-#define PAGE_GAME_NEW_FLASH_MS    140U     // New tile highlight duration.
+#define PAGE_GAME_NEW_FLASH_MS    220U     // New tile highlight duration.
 #define TEXT_GAME_TITLE          "2048"
 #define TEXT_FOOTER_GAME         "JOY MOVE  OK NEW  RST BACK"
 
@@ -492,12 +492,20 @@ static void Page_Game_DrawCell(uint8_t row, uint8_t col)
     exponent = Game2048_GetCell(row, col);
     flash_active = ((g_page_game_new_flash_mask &
         (uint16_t)(1U << ((row * 4U) + col))) != 0U) ? 1U : 0U;
-    fill = Page_Game_GetTileColor(exponent);
-    text_color = (exponent <= 2U) ? UI_COLOR_BG : UI_COLOR_TEXT;
+    if (flash_active != 0U)
+    {
+        fill = UI_COLOR_WARN;
+        text_color = UI_COLOR_BG;
+    }
+    else
+    {
+        fill = Page_Game_GetTileColor(exponent);
+        text_color = (exponent <= 2U) ? UI_COLOR_BG : UI_COLOR_TEXT;
+    }
 
     UI_DrawRect(rect.x, rect.y, rect.w, rect.h, fill);
     UI_DrawFrame(rect.x, rect.y, rect.w, rect.h,
-        (flash_active != 0U) ? UI_COLOR_WARN : UI_COLOR_DIM);
+        (flash_active != 0U) ? UI_COLOR_ACCENT : UI_COLOR_DIM);
     if (flash_active != 0U)
     {
         UI_DrawFrame(
@@ -505,7 +513,7 @@ static void Page_Game_DrawCell(uint8_t row, uint8_t col)
             (int16_t)(rect.y + 1),
             (int16_t)(rect.w - 2),
             (int16_t)(rect.h - 2),
-            UI_COLOR_WARN
+            UI_COLOR_BG
         );
     }
     Page_Game_FormatTile(exponent, tile_text, (uint8_t)sizeof(tile_text));
