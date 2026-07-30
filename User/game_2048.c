@@ -8,6 +8,7 @@ static uint8_t g_game2048_board[GAME2048_SIZE][GAME2048_SIZE];
 static uint32_t g_game2048_score = 0U;
 static uint32_t g_game2048_best_score = 0U;
 static uint32_t g_game2048_rng_state = 1U;
+static uint16_t g_game2048_last_change_mask = 0U;
 static Game2048_State g_game2048_state = GAME2048_STATE_PLAYING;
 
 /*
@@ -239,6 +240,46 @@ static uint8_t Game2048_CheckOver(void)
 }
 
 /*
+ * Build a bit mask from cells that changed since a saved snapshot.
+ *
+ * Bit 0 maps to row 0 column 0, bit 1 maps to row 0 column 1, and bit 15 maps
+ * to row 3 column 3. The page layer uses this compact mask to request local
+ * redraws without knowing how a move was resolved internally.
+ *
+ * Parameters:
+ * previous: Board snapshot captured before a move.
+ *
+ * Return value:
+ * Sixteen-bit mask of cells whose exponent changed.
+ *
+ * Side effects:
+ * None.
+ */
+static uint16_t Game2048_BuildChangeMask(const uint8_t previous[GAME2048_SIZE][GAME2048_SIZE])
+{
+    uint8_t row;
+    uint8_t col;
+    uint8_t bit;
+    uint16_t mask;
+
+    mask = 0U;
+    bit = 0U;
+    for (row = 0U; row < GAME2048_SIZE; row++)
+    {
+        for (col = 0U; col < GAME2048_SIZE; col++)
+        {
+            if (previous[row][col] != g_game2048_board[row][col])
+            {
+                mask |= (uint16_t)(1U << bit);
+            }
+            bit++;
+        }
+    }
+
+    return mask;
+}
+
+/*
  * Apply one 2048 merge pass to a four-cell line.
  *
  * The line is already ordered from the movement edge outward. Nonzero cells
@@ -456,6 +497,7 @@ void Game2048_Restart(uint32_t seed)
     {
         (void)Game2048_AddRandomTile();
     }
+    g_game2048_last_change_mask = 0xFFFFU;
 }
 
 /*
@@ -479,12 +521,24 @@ uint8_t Game2048_Move(Game2048_Direction dir)
 {
     uint8_t index;
     uint8_t line[GAME2048_SIZE];
+    uint8_t previous[GAME2048_SIZE][GAME2048_SIZE];
+    uint8_t row;
+    uint8_t col;
     uint8_t changed;
     uint32_t score_delta;
 
+    g_game2048_last_change_mask = 0U;
     if (g_game2048_state != GAME2048_STATE_PLAYING)
     {
         return 0U;
+    }
+
+    for (row = 0U; row < GAME2048_SIZE; row++)
+    {
+        for (col = 0U; col < GAME2048_SIZE; col++)
+        {
+            previous[row][col] = g_game2048_board[row][col];
+        }
     }
 
     changed = 0U;
@@ -520,6 +574,7 @@ uint8_t Game2048_Move(Game2048_Direction dir)
         g_game2048_state = GAME2048_STATE_OVER;
     }
 
+    g_game2048_last_change_mask = Game2048_BuildChangeMask(previous);
     return 1U;
 }
 
@@ -608,6 +663,27 @@ uint32_t Game2048_GetScore(void)
 uint32_t Game2048_GetBestScore(void)
 {
     return g_game2048_best_score;
+}
+
+/*
+ * Read the cell-change mask produced by the last move or restart.
+ *
+ * The mask is retained until the next call to Game2048_Move or
+ * Game2048_Restart. It lets the page layer repaint only the rows and cells that
+ * visibly changed after the game logic has added the new random tile.
+ *
+ * Parameters:
+ * None.
+ *
+ * Return value:
+ * Sixteen-bit changed-cell mask.
+ *
+ * Side effects:
+ * None.
+ */
+uint16_t Game2048_GetLastChangeMask(void)
+{
+    return g_game2048_last_change_mask;
 }
 
 /*

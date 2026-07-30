@@ -50,6 +50,37 @@ static UI_Rect Page_Game_GetBoardRect(void)
 }
 
 /*
+ * Build the repaint rectangle for one board cell.
+ *
+ * The rectangle includes only the tile square, not the surrounding board gap.
+ * Neighboring changed cells are expanded into row spans before invalidation so
+ * the renderer normally sees at most four board dirty rectangles.
+ *
+ * Parameters:
+ * row: Board row index.
+ * col: Board column index.
+ *
+ * Return value:
+ * Rectangle covering the tile square.
+ *
+ * Side effects:
+ * None.
+ */
+static UI_Rect Page_Game_GetCellRect(uint8_t row, uint8_t col)
+{
+    UI_Rect rect;
+
+    rect.x = (int16_t)(PAGE_GAME_BOARD_X + PAGE_GAME_GAP +
+        ((int16_t)col * (PAGE_GAME_CELL + PAGE_GAME_GAP)));
+    rect.y = (int16_t)(PAGE_GAME_BOARD_Y + PAGE_GAME_GAP +
+        ((int16_t)row * (PAGE_GAME_CELL + PAGE_GAME_GAP)));
+    rect.w = PAGE_GAME_CELL;
+    rect.h = PAGE_GAME_CELL;
+
+    return rect;
+}
+
+/*
  * Mark the score bar dirty.
  *
  * Parameters:
@@ -84,6 +115,88 @@ static void Page_Game_InvalidateBoard(void)
 
     rect = Page_Game_GetBoardRect();
     UI_PageInvalidate(&rect);
+}
+
+/*
+ * Mark the end-state overlay area dirty.
+ *
+ * Parameters:
+ * None.
+ *
+ * Return value:
+ * None.
+ *
+ * Side effects:
+ * Queues a local repaint for the WIN or GAME OVER overlay.
+ */
+static void Page_Game_InvalidateOverlay(void)
+{
+    UI_PageInvalidateXYWH(34, 102, 172, 38);
+}
+
+/*
+ * Mark changed board cells dirty using row spans.
+ *
+ * The dirty queue can hold only a small fixed number of rectangles. A changed
+ * mask may include many cells, so each row is collapsed to the minimal
+ * horizontal span that covers its changed cells. Invalid masks fall back to a
+ * full board repaint.
+ *
+ * Parameters:
+ * mask: Sixteen-bit changed-cell mask from the game logic.
+ *
+ * Return value:
+ * None.
+ *
+ * Side effects:
+ * Queues up to four local board repaint rectangles.
+ */
+static void Page_Game_InvalidateChangedCells(uint16_t mask)
+{
+    uint8_t row;
+    uint8_t col;
+    uint8_t first_col;
+    uint8_t last_col;
+    uint8_t row_has_change;
+    UI_Rect first_rect;
+    UI_Rect last_rect;
+    UI_Rect span;
+
+    if (mask == 0U)
+    {
+        Page_Game_InvalidateBoard();
+        return;
+    }
+
+    for (row = 0U; row < 4U; row++)
+    {
+        first_col = 0U;
+        last_col = 0U;
+        row_has_change = 0U;
+        for (col = 0U; col < 4U; col++)
+        {
+            if ((mask & (uint16_t)(1U << ((row * 4U) + col))) != 0U)
+            {
+                if (row_has_change == 0U)
+                {
+                    first_col = col;
+                    row_has_change = 1U;
+                }
+                last_col = col;
+            }
+        }
+
+        if (row_has_change != 0U)
+        {
+            first_rect = Page_Game_GetCellRect(row, first_col);
+            last_rect = Page_Game_GetCellRect(row, last_col);
+            span.x = first_rect.x;
+            span.y = first_rect.y;
+            span.w = (int16_t)(last_rect.x + last_rect.w - first_rect.x);
+            span.h = first_rect.h;
+            UI_PageInvalidate(&span);
+        }
+    }
 }
 
 /*
@@ -335,13 +448,7 @@ static void Page_Game_DrawCell(uint8_t row, uint8_t col)
     uint16_t fill;
     uint16_t text_color;
 
-    rect.x = (int16_t)(PAGE_GAME_BOARD_X + PAGE_GAME_GAP +
-        ((int16_t)col * (PAGE_GAME_CELL + PAGE_GAME_GAP)));
-    rect.y = (int16_t)(PAGE_GAME_BOARD_Y + PAGE_GAME_GAP +
-        ((int16_t)row * (PAGE_GAME_CELL + PAGE_GAME_GAP)));
-    rect.w = PAGE_GAME_CELL;
-    rect.h = PAGE_GAME_CELL;
-
+    rect = Page_Game_GetCellRect(row, col);
     exponent = Game2048_GetCell(row, col);
     fill = Page_Game_GetTileColor(exponent);
     text_color = (exponent <= 2U) ? UI_COLOR_BG : UI_COLOR_TEXT;
@@ -509,6 +616,8 @@ static void Page_Game_OnEnter(void)
 static void Page_Game_OnEvent(const UI_Event *event)
 {
     Game2048_Direction dir;
+    uint32_t score_before;
+    uint32_t best_before;
     uint8_t has_dir;
 
     if (event == 0)
@@ -575,11 +684,21 @@ static void Page_Game_OnEvent(const UI_Event *event)
     }
 
     g_page_game_last_input_ms = event->timestamp;
+    score_before = Game2048_GetScore();
+    best_before = Game2048_GetBestScore();
     if (Game2048_Move(dir) != 0U)
     {
         g_page_game_input_locked = 1U;
-        Page_Game_InvalidateScore();
-        Page_Game_InvalidateBoard();
+        if ((Game2048_GetScore() != score_before) ||
+            (Game2048_GetBestScore() != best_before))
+        {
+            Page_Game_InvalidateScore();
+        }
+        Page_Game_InvalidateChangedCells(Game2048_GetLastChangeMask());
+        if (Game2048_GetState() != GAME2048_STATE_PLAYING)
+        {
+            Page_Game_InvalidateOverlay();
+        }
     }
 }
 
