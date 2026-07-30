@@ -10,6 +10,7 @@ static uint32_t g_game2048_best_score = 0U;
 static uint32_t g_game2048_rng_state = 1U;
 static uint16_t g_game2048_last_change_mask = 0U;
 static uint16_t g_game2048_last_new_tile_mask = 0U;
+static uint16_t g_game2048_last_merge_mask = 0U;
 static Game2048_State g_game2048_state = GAME2048_STATE_PLAYING;
 
 /*
@@ -291,20 +292,26 @@ static uint16_t Game2048_BuildChangeMask(const uint8_t previous[GAME2048_SIZE][G
  * The line is already ordered from the movement edge outward. Nonzero cells
  * are compacted, equal neighbors merge once, and the tail is filled with zero.
  * The caller writes the transformed line back using the direction-specific
- * board order.
+ * board order. Merge targets are reported in line order so the write-back
+ * helper can map them to board coordinates.
  *
  * Parameters:
  * line: Four exponents ordered toward the move direction.
  * score_delta: Receives the score added by merges in this line.
+ * merge_line_mask: Receives target positions where merges landed.
  *
  * Return value:
  * 1: The line content changed.
  * 0: The line stayed identical.
  *
  * Side effects:
- * Rewrites line.
+ * Rewrites line and may update score_delta and merge_line_mask.
  */
-static uint8_t Game2048_ApplyLine(uint8_t line[GAME2048_SIZE], uint32_t *score_delta)
+static uint8_t Game2048_ApplyLine(
+    uint8_t line[GAME2048_SIZE],
+    uint32_t *score_delta,
+    uint8_t *merge_line_mask
+)
 {
     uint8_t compact[GAME2048_SIZE];
     uint8_t merged[GAME2048_SIZE];
@@ -312,6 +319,11 @@ static uint8_t Game2048_ApplyLine(uint8_t line[GAME2048_SIZE], uint32_t *score_d
     uint8_t read_index;
     uint8_t write_index;
     uint8_t changed;
+
+    if (merge_line_mask != 0)
+    {
+        *merge_line_mask = 0U;
+    }
 
     for (read_index = 0U; read_index < GAME2048_SIZE; read_index++)
     {
@@ -342,6 +354,10 @@ static uint8_t Game2048_ApplyLine(uint8_t line[GAME2048_SIZE], uint32_t *score_d
             if (score_delta != 0)
             {
                 *score_delta += (1UL << merged[write_index]);
+            }
+            if (merge_line_mask != 0)
+            {
+                *merge_line_mask |= (uint8_t)(1U << write_index);
             }
             read_index = (uint8_t)(read_index + 2U);
         }
@@ -414,42 +430,66 @@ static void Game2048_ReadLine(Game2048_Direction dir, uint8_t index, uint8_t lin
  *
  * The line remains in movement-edge order, so the mapping mirrors
  * Game2048_ReadLine. Keeping this mapping in one place avoids duplicated
- * direction-specific loops inside the main move routine.
+ * direction-specific loops inside the main move routine. Merge target bits are
+ * mapped through the same coordinates so the UI never needs to understand move
+ * direction.
  *
  * Parameters:
  * dir: Movement direction.
  * index: Row or column index selected by dir.
  * line: Four exponents in movement order.
+ * merge_line_mask: Merge target bits in movement order.
  *
  * Return value:
- * None.
+ * Board-space merge target mask.
  *
  * Side effects:
  * Writes four board cells.
  */
-static void Game2048_WriteLine(Game2048_Direction dir, uint8_t index, const uint8_t line[GAME2048_SIZE])
+static uint16_t Game2048_WriteLine(
+    Game2048_Direction dir,
+    uint8_t index,
+    const uint8_t line[GAME2048_SIZE],
+    uint8_t merge_line_mask
+)
 {
     uint8_t cell;
+    uint8_t row;
+    uint8_t col;
+    uint16_t board_mask;
 
+    board_mask = 0U;
     for (cell = 0U; cell < GAME2048_SIZE; cell++)
     {
         if (dir == GAME2048_DIR_UP)
         {
-            g_game2048_board[cell][index] = line[cell];
+            row = cell;
+            col = index;
         }
         else if (dir == GAME2048_DIR_DOWN)
         {
-            g_game2048_board[GAME2048_SIZE - 1U - cell][index] = line[cell];
+            row = (uint8_t)(GAME2048_SIZE - 1U - cell);
+            col = index;
         }
         else if (dir == GAME2048_DIR_LEFT)
         {
-            g_game2048_board[index][cell] = line[cell];
+            row = index;
+            col = cell;
         }
         else
         {
-            g_game2048_board[index][GAME2048_SIZE - 1U - cell] = line[cell];
+            row = index;
+            col = (uint8_t)(GAME2048_SIZE - 1U - cell);
+        }
+
+        g_game2048_board[row][col] = line[cell];
+        if ((merge_line_mask & (uint8_t)(1U << cell)) != 0U)
+        {
+            board_mask |= (uint16_t)(1U << ((row * GAME2048_SIZE) + col));
         }
     }
+
+    return board_mask;
 }
 
 /*
@@ -498,6 +538,7 @@ void Game2048_Restart(uint32_t seed)
     g_game2048_rng_state = (seed == 0U) ? 1U : seed;
     g_game2048_rng_state ^= 0xA5A55A5AUL;
     g_game2048_last_new_tile_mask = 0U;
+    g_game2048_last_merge_mask = 0U;
     Game2048_ClearBoard();
 
     for (count = 0U; count < GAME2048_START_TILES; count++)
@@ -531,11 +572,13 @@ uint8_t Game2048_Move(Game2048_Direction dir)
     uint8_t previous[GAME2048_SIZE][GAME2048_SIZE];
     uint8_t row;
     uint8_t col;
+    uint8_t merge_line_mask;
     uint8_t changed;
     uint32_t score_delta;
 
     g_game2048_last_change_mask = 0U;
     g_game2048_last_new_tile_mask = 0U;
+    g_game2048_last_merge_mask = 0U;
     if (g_game2048_state != GAME2048_STATE_PLAYING)
     {
         return 0U;
@@ -554,11 +597,12 @@ uint8_t Game2048_Move(Game2048_Direction dir)
     for (index = 0U; index < GAME2048_SIZE; index++)
     {
         Game2048_ReadLine(dir, index, line);
-        if (Game2048_ApplyLine(line, &score_delta) != 0U)
+        if (Game2048_ApplyLine(line, &score_delta, &merge_line_mask) != 0U)
         {
             changed = 1U;
         }
-        Game2048_WriteLine(dir, index, line);
+        g_game2048_last_merge_mask |=
+            Game2048_WriteLine(dir, index, line, merge_line_mask);
     }
 
     if (changed == 0U)
@@ -713,6 +757,27 @@ uint16_t Game2048_GetLastChangeMask(void)
 uint16_t Game2048_GetLastNewTileMask(void)
 {
     return g_game2048_last_new_tile_mask;
+}
+
+/*
+ * Read the merge-target mask produced by the last successful move.
+ *
+ * Only the destination cells that received a merged tile are reported. Source
+ * cells that disappeared during compaction are already covered by the normal
+ * change mask and are not marked as merge feedback targets.
+ *
+ * Parameters:
+ * None.
+ *
+ * Return value:
+ * Sixteen-bit mask containing merge destination cells, or zero.
+ *
+ * Side effects:
+ * None.
+ */
+uint16_t Game2048_GetLastMergeMask(void)
+{
+    return g_game2048_last_merge_mask;
 }
 
 /*

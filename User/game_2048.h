@@ -28,6 +28,7 @@ uint32_t Game2048_GetScore(void);
 uint32_t Game2048_GetBestScore(void);
 uint16_t Game2048_GetLastChangeMask(void);
 uint16_t Game2048_GetLastNewTileMask(void);
+uint16_t Game2048_GetLastMergeMask(void);
 uint8_t Game2048_GetCell(uint8_t row, uint8_t col);
 
 #endif
