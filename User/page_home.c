@@ -14,6 +14,8 @@
 #define TEXT_INFO                 "\xCF\xB5\xCD\xB3\xD0\xC5\xCF\xA2"
 #define TEXT_CONFIRM              "\xC8\xB7\xC8\xCF"
 #define TEXT_FOOTER_HOME          "\xC9\xCF\xCF\xC2\xD1\xA1\xD4\xF1  \xC8\xB7\xC8\xCF\xBD\xF8\xC8\xEB"
+#define TEXT_FOOTER_2048          "GOAL PUZZLE"
+#define TEXT_FOOTER_SNAKE         "REALTIME"
 
 static uint8_t g_home_selected = 0U;
 static uint8_t g_home_enter_pending = 0U;
@@ -81,6 +83,36 @@ static void Page_Home_InvalidateRow(uint8_t index)
 static void Page_Home_InvalidateAnim(const UI_Rect *dirty)
 {
     UI_DirtyAdd(dirty);
+}
+
+/*
+ * Select the footer hint for the currently focused HOME item.
+ *
+ * Game entries use the footer as a compact category label so the player can
+ * tell that 2048 is a goal puzzle and Snake is real-time before entering.
+ * Non-game entries keep the original navigation hint.
+ *
+ * Parameters:
+ * None.
+ *
+ * Return value:
+ * Footer text for the current HOME selection.
+ *
+ * Side effects:
+ * None.
+ */
+static const char *Page_Home_GetFooterText(void)
+{
+    if (g_home_selected == 0U)
+    {
+        return TEXT_FOOTER_2048;
+    }
+    if (g_home_selected == 1U)
+    {
+        return TEXT_FOOTER_SNAKE;
+    }
+
+    return TEXT_FOOTER_HOME;
 }
 
 /*
@@ -291,7 +323,7 @@ static void Page_Home_Draw(const UI_Rect *clip)
     row = Page_Home_GetRowRect(3U);
     UI_DrawMenuRowCNEx(12, row.y, 216, TEXT_INFO, ">", (g_home_selected == 3U) ? 1U : 0U, UI_FeedbackIsActive(&row, g_home_draw_now));
     UI_DrawFocusMarker(12, UI_FocusAnimGetY(&g_home_focus_anim), (int16_t)UI_ROW_H, UI_COLOR_ACCENT);
-    UI_DrawFooter(TEXT_FOOTER_HOME);
+    UI_DrawFooter(Page_Home_GetFooterText());
 }
 
 const UI_PageOps PAGE_HOME_OPS =
