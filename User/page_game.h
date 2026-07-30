@@ -5,4 +5,6 @@
 
 extern const UI_PageOps PAGE_GAME_OPS;
 
+void Page_Game_RestartFromMenu(uint32_t seed);
+
 #endif

@@ -446,6 +446,26 @@ static void Page_Game_Restart(uint32_t seed)
 }
 
 /*
+ * Restart the GAME page from an external menu.
+ *
+ * The pause page uses this helper before returning to GAME so the board reset
+ * and GAME input guards are kept in the same state as an in-game OK restart.
+ *
+ * Parameters:
+ * seed: Entropy used by the game RNG.
+ *
+ * Return value:
+ * None.
+ *
+ * Side effects:
+ * Resets the board, refresh timing guards, and queues a GAME redraw.
+ */
+void Page_Game_RestartFromMenu(uint32_t seed)
+{
+    Page_Game_Restart(seed);
+}
+
+/*
  * Enter the GAME page.
  *
  * Parameters:

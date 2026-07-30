@@ -36,6 +36,7 @@ typedef enum
 {
     UI_PAGE_HOME = 0,                  // Main menu page.
     UI_PAGE_GAME,                      // 2048 game page.
+    UI_PAGE_PAUSE,                     // 2048 pause menu page.
     UI_PAGE_SETTINGS,                  // Settings page.
     UI_PAGE_INFO,                      // System information page.
     UI_PAGE_COUNT                      // Number of registered pages.

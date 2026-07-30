@@ -2,6 +2,7 @@
 #include "page_home.h"
 #include "page_info.h"
 #include "page_game.h"
+#include "page_pause.h"
 #include "page_settings.h"
 #include "ui_dirty.h"
 #include "ui_draw.h"
@@ -12,6 +13,7 @@ static const UI_PageOps * const UI_PAGES[UI_PAGE_COUNT] =
 {
     &PAGE_HOME_OPS,
     &PAGE_GAME_OPS,
+    &PAGE_PAUSE_OPS,
     &PAGE_SETTINGS_OPS,
     &PAGE_INFO_OPS
 };
@@ -145,8 +147,9 @@ void UI_PageHome(void)
 /*
  * Handle a page back action.
  *
- * The current stage uses shallow navigation: every child page returns to HOME.
- * HOME consumes BACK by staying visible.
+ * The current stage uses shallow navigation for most pages: child pages return
+ * to HOME, while PAUSE returns to GAME so a short RST from the pause menu acts
+ * like resume. HOME consumes BACK by staying visible.
  *
  * Parameters:
  * None.
@@ -159,14 +162,19 @@ void UI_PageHome(void)
  */
 void UI_PageBack(void)
 {
+    if (g_ui_current_page == UI_PAGE_PAUSE)
+    {
+        UI_PageGoto(UI_PAGE_GAME);
+        return;
+    }
+
     if (g_ui_current_page != UI_PAGE_HOME)
     {
         UI_PageHome();
+        return;
     }
-    else
-    {
-        UI_PageRequestRedraw();
-    }
+
+    UI_PageRequestRedraw();
 }
 
 /*
@@ -190,7 +198,8 @@ UI_PageId UI_PageGetCurrent(void)
  * Dispatch one UI event with global priority.
  *
  * SYSTEM_RESET, HOME, SETTINGS, and BACK are handled before page-local event
- * handlers so those commands remain consistent across all pages.
+ * handlers so those commands remain consistent. SETTINGS opens PAUSE from GAME
+ * and opens SETTINGS from the other pages.
  *
  * Parameters:
  * event: Logical event to process.
@@ -219,7 +228,14 @@ void UI_PageDispatchEvent(const UI_Event *event)
             break;
 
         case UI_EVENT_SETTINGS:
-            UI_PageGoto(UI_PAGE_SETTINGS);
+            if (g_ui_current_page == UI_PAGE_GAME)
+            {
+                UI_PageGoto(UI_PAGE_PAUSE);
+            }
+            else
+            {
+                UI_PageGoto(UI_PAGE_SETTINGS);
+            }
             break;
 
         case UI_EVENT_BACK:

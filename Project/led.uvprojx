@@ -615,6 +615,16 @@
               <FilePath>..\User\page_game.h</FilePath>
             </File>
             <File>
+              <FileName>page_pause.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\page_pause.c</FilePath>
+            </File>
+            <File>
+              <FileName>page_pause.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\page_pause.h</FilePath>
+            </File>
+            <File>
               <FileName>page_settings.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\User\page_settings.c</FilePath>
