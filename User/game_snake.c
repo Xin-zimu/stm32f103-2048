@@ -14,6 +14,7 @@ static Snake_State g_snake_state = SNAKE_STATE_RUNNING;
 static uint32_t g_snake_score = 0U;
 static uint32_t g_snake_best_score = 0U;
 static uint32_t g_snake_rng_state = 1U;
+static uint16_t g_snake_last_dirty_rows[SNAKE_GRID_SIZE];
 
 /*
  * Advance the Snake pseudo-random generator.
@@ -34,6 +35,57 @@ static uint32_t Snake_Rand(void)
 {
     g_snake_rng_state = (g_snake_rng_state * 1664525UL) + 1013904223UL;
     return g_snake_rng_state;
+}
+
+/*
+ * Clear all recorded Snake dirty cells.
+ *
+ * The dirty map contains one 16-bit mask per board row. It is cleared before a
+ * step records the cells that changed during that movement.
+ *
+ * Parameters:
+ * None.
+ *
+ * Return value:
+ * None.
+ *
+ * Side effects:
+ * Clears g_snake_last_dirty_rows.
+ */
+static void Snake_ClearDirtyRows(void)
+{
+    uint8_t row;
+
+    for (row = 0U; row < SNAKE_GRID_SIZE; row++)
+    {
+        g_snake_last_dirty_rows[row] = 0U;
+    }
+}
+
+/*
+ * Mark one Snake board cell as visually changed.
+ *
+ * The page layer later turns row masks into row-span dirty rectangles so a
+ * timer step normally queues only the cells touched by head, tail, and food.
+ *
+ * Parameters:
+ * row: Board row index.
+ * col: Board column index.
+ *
+ * Return value:
+ * None.
+ *
+ * Side effects:
+ * Updates the matching row mask when the coordinate is in range.
+ */
+static void Snake_MarkDirtyCell(uint8_t row, uint8_t col)
+{
+    if ((row >= SNAKE_GRID_SIZE) || (col >= SNAKE_GRID_SIZE))
+    {
+        return;
+    }
+
+    g_snake_last_dirty_rows[row] |= (uint16_t)(1U << col);
 }
 
 /*
@@ -154,6 +206,7 @@ static uint8_t Snake_PlaceFood(void)
                 {
                     g_snake_food_row = row;
                     g_snake_food_col = col;
+                    Snake_MarkDirtyCell(row, col);
                     return 1U;
                 }
                 seen++;
@@ -249,6 +302,7 @@ void Snake_Restart(uint32_t seed)
     g_snake_dir = SNAKE_DIR_RIGHT;
     g_snake_pending_dir = SNAKE_DIR_RIGHT;
     g_snake_state = SNAKE_STATE_RUNNING;
+    Snake_ClearDirtyRows();
 
     for (index = 0U; index < SNAKE_START_LENGTH; index++)
     {
@@ -338,8 +392,13 @@ uint8_t Snake_Step(void)
     uint16_t collision_count;
     uint8_t new_row;
     uint8_t new_col;
+    uint8_t old_head_row;
+    uint8_t old_head_col;
+    uint8_t old_tail_row;
+    uint8_t old_tail_col;
     uint8_t grow;
 
+    Snake_ClearDirtyRows();
     if (g_snake_state != SNAKE_STATE_RUNNING)
     {
         return 0U;
@@ -348,6 +407,10 @@ uint8_t Snake_Step(void)
     g_snake_dir = g_snake_pending_dir;
     new_row = g_snake_body_row[0];
     new_col = g_snake_body_col[0];
+    old_head_row = g_snake_body_row[0];
+    old_head_col = g_snake_body_col[0];
+    old_tail_row = g_snake_body_row[g_snake_length - 1U];
+    old_tail_col = g_snake_body_col[g_snake_length - 1U];
     switch (g_snake_dir)
     {
         case SNAKE_DIR_UP:
@@ -409,6 +472,12 @@ uint8_t Snake_Step(void)
     }
     g_snake_body_row[0] = new_row;
     g_snake_body_col[0] = new_col;
+    Snake_MarkDirtyCell(old_head_row, old_head_col);
+    Snake_MarkDirtyCell(new_row, new_col);
+    if (grow == 0U)
+    {
+        Snake_MarkDirtyCell(old_tail_row, old_tail_col);
+    }
 
     if (grow != 0U)
     {
@@ -492,6 +561,31 @@ uint32_t Snake_GetBestScore(void)
 uint16_t Snake_GetLength(void)
 {
     return g_snake_length;
+}
+
+/*
+ * Read one row of the dirty-cell map from the last Snake step.
+ *
+ * Bit 0 maps to column 0 and bit 15 maps to column 15. The mask is retained
+ * until the next Snake_Step call so the page can schedule local repaint spans.
+ *
+ * Parameters:
+ * row: Board row index.
+ *
+ * Return value:
+ * Sixteen-bit dirty-cell mask for the requested row, or zero.
+ *
+ * Side effects:
+ * None.
+ */
+uint16_t Snake_GetLastDirtyRowMask(uint8_t row)
+{
+    if (row >= SNAKE_GRID_SIZE)
+    {
+        return 0U;
+    }
+
+    return g_snake_last_dirty_rows[row];
 }
 
 /*

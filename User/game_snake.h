@@ -38,6 +38,7 @@ Snake_State Snake_GetState(void);
 uint32_t Snake_GetScore(void);
 uint32_t Snake_GetBestScore(void);
 uint16_t Snake_GetLength(void);
+uint16_t Snake_GetLastDirtyRowMask(uint8_t row);
 Snake_Cell Snake_GetCell(uint8_t row, uint8_t col);
 
 #endif

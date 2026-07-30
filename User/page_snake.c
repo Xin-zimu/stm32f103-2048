@@ -44,7 +44,36 @@ static UI_Rect Page_Snake_GetBoardRect(void)
 }
 
 /*
- * Mark the Snake board dirty.
+ * Build the repaint rectangle for one Snake board cell.
+ *
+ * Parameters:
+ * row: Board row index.
+ * col: Board column index.
+ *
+ * Return value:
+ * Rectangle covering the visible cell square.
+ *
+ * Side effects:
+ * None.
+ */
+static UI_Rect Page_Snake_GetCellRect(uint8_t row, uint8_t col)
+{
+    UI_Rect rect;
+
+    rect.x = (int16_t)(PAGE_SNAKE_BOARD_X + ((int16_t)col * PAGE_SNAKE_STEP));
+    rect.y = (int16_t)(PAGE_SNAKE_BOARD_Y + ((int16_t)row * PAGE_SNAKE_STEP));
+    rect.w = PAGE_SNAKE_CELL;
+    rect.h = PAGE_SNAKE_CELL;
+
+    return rect;
+}
+
+/*
+ * Mark Snake cells dirty using row spans.
+ *
+ * The rule layer exposes one 16-bit mask per Snake row. Each non-empty row is
+ * collapsed to the shortest horizontal span covering its dirty cells so normal
+ * movement queues only a few local rectangles.
  *
  * Parameters:
  * None.
@@ -53,14 +82,55 @@ static UI_Rect Page_Snake_GetBoardRect(void)
  * None.
  *
  * Side effects:
- * Queues a local board repaint.
+ * Queues local Snake board repaint rectangles.
  */
-static void Page_Snake_InvalidateBoard(void)
+static void Page_Snake_InvalidateChangedCells(void)
 {
-    UI_Rect rect;
+    uint8_t row;
+    uint8_t col;
+    uint8_t first_col;
+    uint8_t last_col;
+    uint8_t row_has_change;
+    uint16_t row_mask;
+    UI_Rect first_rect;
+    UI_Rect last_rect;
+    UI_Rect span;
 
-    rect = Page_Snake_GetBoardRect();
-    UI_PageInvalidate(&rect);
+    for (row = 0U; row < SNAKE_GRID_SIZE; row++)
+    {
+        row_mask = Snake_GetLastDirtyRowMask(row);
+        if (row_mask == 0U)
+        {
+            continue;
+        }
+
+        first_col = 0U;
+        last_col = 0U;
+        row_has_change = 0U;
+        for (col = 0U; col < SNAKE_GRID_SIZE; col++)
+        {
+            if ((row_mask & (uint16_t)(1U << col)) != 0U)
+            {
+                if (row_has_change == 0U)
+                {
+                    first_col = col;
+                    row_has_change = 1U;
+                }
+                last_col = col;
+            }
+        }
+
+        if (row_has_change != 0U)
+        {
+            first_rect = Page_Snake_GetCellRect(row, first_col);
+            last_rect = Page_Snake_GetCellRect(row, last_col);
+            span.x = first_rect.x;
+            span.y = first_rect.y;
+            span.w = (int16_t)(last_rect.x + last_rect.w - first_rect.x);
+            span.h = first_rect.h;
+            UI_PageInvalidate(&span);
+        }
+    }
 }
 
 /*
@@ -244,13 +314,11 @@ static uint16_t Page_Snake_GetCellColor(Snake_Cell cell)
 static void Page_Snake_DrawCell(uint8_t row, uint8_t col)
 {
     Snake_Cell cell;
-    int16_t x;
-    int16_t y;
+    UI_Rect rect;
 
     cell = Snake_GetCell(row, col);
-    x = (int16_t)(PAGE_SNAKE_BOARD_X + ((int16_t)col * PAGE_SNAKE_STEP));
-    y = (int16_t)(PAGE_SNAKE_BOARD_Y + ((int16_t)row * PAGE_SNAKE_STEP));
-    UI_DrawRect(x, y, PAGE_SNAKE_CELL, PAGE_SNAKE_CELL, Page_Snake_GetCellColor(cell));
+    rect = Page_Snake_GetCellRect(row, col);
+    UI_DrawRect(rect.x, rect.y, rect.w, rect.h, Page_Snake_GetCellColor(cell));
 }
 
 /*
@@ -269,12 +337,14 @@ static void Page_Snake_DrawBoard(void)
 {
     uint8_t row;
     uint8_t col;
+    UI_Rect rect;
 
+    rect = Page_Snake_GetBoardRect();
     UI_DrawRect(
-        PAGE_SNAKE_BOARD_X,
-        PAGE_SNAKE_BOARD_Y,
-        PAGE_SNAKE_BOARD_SIZE,
-        PAGE_SNAKE_BOARD_SIZE,
+        rect.x,
+        rect.y,
+        rect.w,
+        rect.h,
         UI_COLOR_DIM
     );
 
@@ -453,7 +523,7 @@ static void Page_Snake_OnEvent(const UI_Event *event)
  * None.
  *
  * Side effects:
- * May advance the snake and queue board/header/footer repaints.
+ * May advance the snake and queue changed-cell, header, or footer repaints.
  */
 static void Page_Snake_Task(uint32_t now)
 {
@@ -473,7 +543,7 @@ static void Page_Snake_Task(uint32_t now)
         return;
     }
 
-    Page_Snake_InvalidateBoard();
+    Page_Snake_InvalidateChangedCells();
     if (Snake_GetScore() != score_before)
     {
         Page_Snake_InvalidateHeader();
