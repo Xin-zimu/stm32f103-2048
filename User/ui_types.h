@@ -35,7 +35,7 @@ typedef struct
 typedef enum
 {
     UI_PAGE_HOME = 0,                  // Main menu page.
-    UI_PAGE_PLAYER,                    // Player placeholder page.
+    UI_PAGE_GAME,                      // 2048 game page.
     UI_PAGE_SETTINGS,                  // Settings page.
     UI_PAGE_INFO,                      // System information page.
     UI_PAGE_COUNT                      // Number of registered pages.

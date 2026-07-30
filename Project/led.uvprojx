@@ -595,14 +595,24 @@
               <FilePath>..\User\page_home.h</FilePath>
             </File>
             <File>
-              <FileName>page_player.c</FileName>
+              <FileName>game_2048.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\User\page_player.c</FilePath>
+              <FilePath>..\User\game_2048.c</FilePath>
             </File>
             <File>
-              <FileName>page_player.h</FileName>
+              <FileName>game_2048.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\User\page_player.h</FilePath>
+              <FilePath>..\User\game_2048.h</FilePath>
+            </File>
+            <File>
+              <FileName>page_game.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\page_game.c</FilePath>
+            </File>
+            <File>
+              <FileName>page_game.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\page_game.h</FilePath>
             </File>
             <File>
               <FileName>page_settings.c</FileName>

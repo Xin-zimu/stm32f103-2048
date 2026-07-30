@@ -1,7 +1,7 @@
 #include "ui_page.h"
 #include "page_home.h"
 #include "page_info.h"
-#include "page_player.h"
+#include "page_game.h"
 #include "page_settings.h"
 #include "ui_dirty.h"
 #include "ui_draw.h"
@@ -11,7 +11,7 @@
 static const UI_PageOps * const UI_PAGES[UI_PAGE_COUNT] =
 {
     &PAGE_HOME_OPS,
-    &PAGE_PLAYER_OPS,
+    &PAGE_GAME_OPS,
     &PAGE_SETTINGS_OPS,
     &PAGE_INFO_OPS
 };

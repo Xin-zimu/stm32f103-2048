@@ -4,11 +4,11 @@
 #include "ui_draw.h"
 #include "ui_feedback.h"
 
-#define PAGE_HOME_ITEM_COUNT       3U      // Player, settings, and info.
+#define PAGE_HOME_ITEM_COUNT       3U      // Game, settings, and info.
 #define PAGE_HOME_ROW_Y0          46       // First large menu row top.
 #define PAGE_HOME_ROW_STEP        54       // Distance between large menu rows.
 #define TEXT_HOME_TITLE           "\xD6\xF7\xD2\xB3"
-#define TEXT_PLAYER               "\xB6\xAF\xBB\xAD\xB2\xA5\xB7\xC5\xC6\xF7"
+#define TEXT_GAME                 "2048"
 #define TEXT_SETTINGS             "\xC9\xE8\xD6\xC3"
 #define TEXT_INFO                 "\xCF\xB5\xCD\xB3\xD0\xC5\xCF\xA2"
 #define TEXT_CONFIRM              "\xC8\xB7\xC8\xCF"
@@ -149,7 +149,7 @@ static void Page_Home_StartEnter(uint32_t now)
 
     if (g_home_selected == 0U)
     {
-        g_home_pending_page = UI_PAGE_PLAYER;
+        g_home_pending_page = UI_PAGE_GAME;
     }
     else if (g_home_selected == 1U)
     {
@@ -281,7 +281,7 @@ static void Page_Home_Draw(const UI_Rect *clip)
 
     UI_DrawStatusBar(TEXT_HOME_TITLE, UI_COLOR_ACCENT);
     row = Page_Home_GetRowRect(0U);
-    UI_DrawMenuRowCNEx(12, row.y, 216, TEXT_PLAYER, ">", (g_home_selected == 0U) ? 1U : 0U, UI_FeedbackIsActive(&row, g_home_draw_now));
+    UI_DrawMenuRowCNEx(12, row.y, 216, TEXT_GAME, ">", (g_home_selected == 0U) ? 1U : 0U, UI_FeedbackIsActive(&row, g_home_draw_now));
     row = Page_Home_GetRowRect(1U);
     UI_DrawMenuRowCNEx(12, row.y, 216, TEXT_SETTINGS, ">", (g_home_selected == 1U) ? 1U : 0U, UI_FeedbackIsActive(&row, g_home_draw_now));
     row = Page_Home_GetRowRect(2U);
