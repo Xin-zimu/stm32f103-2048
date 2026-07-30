@@ -2,7 +2,9 @@
 
 #define GAME2048_SIZE             4U      // Board edge length in cells.
 #define GAME2048_START_TILES      2U      // Tiles placed on a fresh board.
-#define GAME2048_WIN_EXP         11U      // 2^11 is 2048.
+#define GAME2048_DEFAULT_GOAL_EXP 11U     // 2^11 is the classic 2048 goal.
+#define GAME2048_MIN_GOAL_EXP     7U      // 2^7 is 128, the smallest goal mode.
+#define GAME2048_MAX_GOAL_EXP    11U      // 2^11 is 2048, the largest goal mode.
 
 static uint8_t g_game2048_board[GAME2048_SIZE][GAME2048_SIZE];
 static uint32_t g_game2048_score = 0U;
@@ -11,6 +13,7 @@ static uint32_t g_game2048_rng_state = 1U;
 static uint16_t g_game2048_last_change_mask = 0U;
 static uint16_t g_game2048_last_new_tile_mask = 0U;
 static uint16_t g_game2048_last_merge_mask = 0U;
+static uint8_t g_game2048_goal_exp = GAME2048_DEFAULT_GOAL_EXP;
 static Game2048_State g_game2048_state = GAME2048_STATE_PLAYING;
 
 /*
@@ -165,10 +168,11 @@ static uint8_t Game2048_AddRandomTile(uint8_t track_new_tile)
 }
 
 /*
- * Test whether any board cell has reached 2048.
+ * Test whether any board cell has reached the current goal.
  *
- * The board stores exponents, so the win condition is exponent 11 instead of
- * comparing against the literal value 2048.
+ * The board stores exponents, so the win condition compares against the active
+ * goal exponent instead of a literal tile value. This keeps Classic 2048 and
+ * shorter goal modes on the same move logic.
  *
  * Parameters:
  * None.
@@ -189,7 +193,7 @@ static uint8_t Game2048_CheckWin(void)
     {
         for (col = 0U; col < GAME2048_SIZE; col++)
         {
-            if (g_game2048_board[row][col] >= GAME2048_WIN_EXP)
+            if (g_game2048_board[row][col] >= g_game2048_goal_exp)
             {
                 return 1U;
             }
@@ -244,6 +248,70 @@ static uint8_t Game2048_CheckOver(void)
     }
 
     return 1U;
+}
+
+/*
+ * Clamp a requested goal exponent to the supported goal range.
+ *
+ * Goal mode deliberately exposes only 128 through 2048 so the pause menu can
+ * cycle through a compact fixed list without extra validation state.
+ *
+ * Parameters:
+ * goal_exp: Requested tile exponent.
+ *
+ * Return value:
+ * Supported goal exponent.
+ *
+ * Side effects:
+ * None.
+ */
+static uint8_t Game2048_ClampGoalExp(uint8_t goal_exp)
+{
+    if (goal_exp < GAME2048_MIN_GOAL_EXP)
+    {
+        return GAME2048_MIN_GOAL_EXP;
+    }
+    if (goal_exp > GAME2048_MAX_GOAL_EXP)
+    {
+        return GAME2048_MAX_GOAL_EXP;
+    }
+
+    return goal_exp;
+}
+
+/*
+ * Recalculate the current state after the goal changes.
+ *
+ * Raising the goal from a WIN board can return the game to PLAYING when legal
+ * moves remain. Lowering the goal can immediately show WIN if the board already
+ * contains a large enough tile. No score, RNG, or board cells are changed.
+ *
+ * Parameters:
+ * None.
+ *
+ * Return value:
+ * None.
+ *
+ * Side effects:
+ * Updates the game state.
+ */
+static void Game2048_UpdateStateForGoal(void)
+{
+    uint8_t over;
+
+    over = Game2048_CheckOver();
+    if (Game2048_CheckWin() != 0U)
+    {
+        g_game2048_state = GAME2048_STATE_WIN;
+        return;
+    }
+    if (over != 0U)
+    {
+        g_game2048_state = GAME2048_STATE_OVER;
+        return;
+    }
+
+    g_game2048_state = GAME2048_STATE_PLAYING;
 }
 
 /*
@@ -511,6 +579,7 @@ static uint16_t Game2048_WriteLine(
  */
 void Game2048_Init(uint32_t seed)
 {
+    g_game2048_goal_exp = GAME2048_DEFAULT_GOAL_EXP;
     g_game2048_best_score = 0U;
     Game2048_Restart(seed);
 }
@@ -628,6 +697,62 @@ uint8_t Game2048_Move(Game2048_Direction dir)
 
     g_game2048_last_change_mask = Game2048_BuildChangeMask(previous);
     return 1U;
+}
+
+/*
+ * Set the active goal tile for goal mode.
+ *
+ * The stored value is an exponent, so 7 means tile 128 and 11 means tile 2048.
+ * The current board is rechecked immediately so changing the goal from the
+ * pause menu updates WIN or PLAYING status before returning to GAME.
+ *
+ * Parameters:
+ * goal_exp: Requested goal exponent.
+ *
+ * Return value:
+ * None.
+ *
+ * Side effects:
+ * Updates the goal exponent and may update the game state.
+ */
+void Game2048_SetGoalExp(uint8_t goal_exp)
+{
+    g_game2048_goal_exp = Game2048_ClampGoalExp(goal_exp);
+    Game2048_UpdateStateForGoal();
+}
+
+/*
+ * Read the active goal exponent.
+ *
+ * Parameters:
+ * None.
+ *
+ * Return value:
+ * Current goal exponent.
+ *
+ * Side effects:
+ * None.
+ */
+uint8_t Game2048_GetGoalExp(void)
+{
+    return g_game2048_goal_exp;
+}
+
+/*
+ * Read the active goal tile value.
+ *
+ * Parameters:
+ * None.
+ *
+ * Return value:
+ * Tile value represented by the current goal exponent.
+ *
+ * Side effects:
+ * None.
+ */
+uint32_t Game2048_GetGoalValue(void)
+{
+    return 1UL << g_game2048_goal_exp;
 }
 
 /*

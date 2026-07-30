@@ -1,15 +1,17 @@
 #include "page_pause.h"
+#include "game_2048.h"
 #include "page_game.h"
 #include "ui_anim.h"
 #include "ui_dirty.h"
 #include "ui_draw.h"
 
-#define PAGE_PAUSE_ITEM_COUNT      3U      // Resume, restart, and home.
-#define PAGE_PAUSE_ROW_Y0         54       // First pause menu row top.
-#define PAGE_PAUSE_ROW_STEP       52       // Distance between pause menu rows.
+#define PAGE_PAUSE_ITEM_COUNT      4U      // Resume, restart, goal, and home.
+#define PAGE_PAUSE_ROW_Y0         38       // First pause menu row top.
+#define PAGE_PAUSE_ROW_STEP       44       // Distance between pause menu rows.
 #define TEXT_PAUSE_TITLE        "PAUSE"
 #define TEXT_PAUSE_RESUME       "RESUME"
 #define TEXT_PAUSE_RESTART      "NEW GAME"
+#define TEXT_PAUSE_GOAL         "GOAL"
 #define TEXT_PAUSE_HOME         "HOME"
 #define TEXT_PAUSE_FOOTER       "OK SELECT  LEFT RESUME"
 
@@ -78,6 +80,76 @@ static void Page_Pause_InvalidateAnim(const UI_Rect *dirty)
 }
 
 /*
+ * Convert the active game goal into a compact menu value.
+ *
+ * The pause menu exposes a fixed goal cycle, so the value is returned from a
+ * small constant table instead of formatting numbers at runtime.
+ *
+ * Parameters:
+ * None.
+ *
+ * Return value:
+ * Null-terminated ASCII goal value.
+ *
+ * Side effects:
+ * None.
+ */
+static const char *Page_Pause_GetGoalText(void)
+{
+    static const char * const goal_texts[5] =
+    {
+        "128",
+        "256",
+        "512",
+        "1024",
+        "2048"
+    };
+    uint8_t goal_exp;
+
+    goal_exp = Game2048_GetGoalExp();
+    if (goal_exp <= 7U)
+    {
+        return goal_texts[0];
+    }
+    if (goal_exp >= 11U)
+    {
+        return goal_texts[4];
+    }
+
+    return goal_texts[goal_exp - 7U];
+}
+
+/*
+ * Cycle the active game goal to the next supported tile.
+ *
+ * Goal values step through 128, 256, 512, 1024, and 2048. The current board is
+ * re-evaluated by the game module, but the pause page stays open so the player
+ * can decide whether to resume or start a new board.
+ *
+ * Parameters:
+ * None.
+ *
+ * Return value:
+ * None.
+ *
+ * Side effects:
+ * Updates the game goal and queues the GOAL row for repaint.
+ */
+static void Page_Pause_CycleGoal(void)
+{
+    uint8_t goal_exp;
+
+    goal_exp = Game2048_GetGoalExp();
+    goal_exp++;
+    if (goal_exp > 11U)
+    {
+        goal_exp = 7U;
+    }
+    Game2048_SetGoalExp(goal_exp);
+    Page_Pause_InvalidateRow(2U);
+}
+
+/*
  * Enter the pause page.
  *
  * Parameters:
@@ -101,8 +173,9 @@ static void Page_Pause_OnEnter(void)
  * Execute the currently selected pause command.
  *
  * Resume returns to the live GAME page without changing the board. Restart
- * resets the 2048 board through the GAME page helper before returning. Home
- * uses the normal page-home path.
+ * resets the 2048 board through the GAME page helper before returning. Goal
+ * cycles the target tile while staying paused. Home uses the normal page-home
+ * path.
  *
  * Parameters:
  * now: Timestamp used as the restart RNG seed when needed.
@@ -118,16 +191,21 @@ static void Page_Pause_Activate(uint32_t now)
     if (g_pause_selected == 0U)
     {
         UI_PageGoto(UI_PAGE_GAME);
+        return;
     }
-    else if (g_pause_selected == 1U)
+    if (g_pause_selected == 1U)
     {
         Page_Game_RestartFromMenu(now);
         UI_PageGoto(UI_PAGE_GAME);
+        return;
     }
-    else
+    if (g_pause_selected == 2U)
     {
-        UI_PageHome();
+        Page_Pause_CycleGoal();
+        return;
     }
+
+    UI_PageHome();
 }
 
 /*
@@ -235,7 +313,17 @@ static void Page_Pause_Draw(const UI_Rect *clip)
     row = Page_Pause_GetRowRect(1U);
     UI_DrawMenuRowCNEx(12, row.y, 216, TEXT_PAUSE_RESTART, ">", (g_pause_selected == 1U) ? 1U : 0U, 0U);
     row = Page_Pause_GetRowRect(2U);
-    UI_DrawMenuRowCNEx(12, row.y, 216, TEXT_PAUSE_HOME, ">", (g_pause_selected == 2U) ? 1U : 0U, 0U);
+    UI_DrawMenuRowCNEx(
+        12,
+        row.y,
+        216,
+        TEXT_PAUSE_GOAL,
+        Page_Pause_GetGoalText(),
+        (g_pause_selected == 2U) ? 1U : 0U,
+        0U
+    );
+    row = Page_Pause_GetRowRect(3U);
+    UI_DrawMenuRowCNEx(12, row.y, 216, TEXT_PAUSE_HOME, ">", (g_pause_selected == 3U) ? 1U : 0U, 0U);
     UI_DrawFocusMarker(12, UI_FocusAnimGetY(&g_pause_focus_anim), (int16_t)UI_ROW_H, UI_COLOR_ACCENT);
     UI_DrawFooter(TEXT_PAUSE_FOOTER);
 }

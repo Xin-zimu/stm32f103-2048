@@ -21,6 +21,9 @@ typedef enum
 void Game2048_Init(uint32_t seed);
 void Game2048_Restart(uint32_t seed);
 uint8_t Game2048_Move(Game2048_Direction dir);
+void Game2048_SetGoalExp(uint8_t goal_exp);
+uint8_t Game2048_GetGoalExp(void);
+uint32_t Game2048_GetGoalValue(void);
 Game2048_State Game2048_GetState(void);
 uint8_t Game2048_IsWin(void);
 uint8_t Game2048_IsOver(void);

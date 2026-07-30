@@ -14,7 +14,6 @@
 #define PAGE_GAME_RESTART_GUARD   300U     // Minimum time between OK restarts.
 #define PAGE_GAME_NEW_FLASH_MS    220U     // New tile highlight duration.
 #define PAGE_GAME_MERGE_FLASH_MS  180U     // Merge target highlight duration.
-#define TEXT_GAME_TITLE          "2048"
 #define TEXT_FOOTER_GAME         "JOY MOVE  OK NEW  RST BACK"
 
 static uint8_t g_page_game_initialized = 0U;
@@ -479,7 +478,7 @@ static uint16_t Page_Game_GetTileColor(uint8_t exponent)
 }
 
 /*
- * Draw the score and best-score header.
+ * Draw the goal, score, and best-score header.
  *
  * Parameters:
  * None.
@@ -492,13 +491,16 @@ static uint16_t Page_Game_GetTileColor(uint8_t exponent)
  */
 static void Page_Game_DrawHeader(void)
 {
+    char title_text[6];
     char score_text[11];
     char best_text[11];
 
+    title_text[0] = 'G';
+    Page_Game_FormatU32(Game2048_GetGoalValue(), &title_text[1], 5U);
     Page_Game_FormatU32(Game2048_GetScore(), score_text, (uint8_t)sizeof(score_text));
     Page_Game_FormatU32(Game2048_GetBestScore(), best_text, (uint8_t)sizeof(best_text));
 
-    UI_DrawStatusBar(TEXT_GAME_TITLE, UI_COLOR_ACCENT);
+    UI_DrawStatusBar(title_text, UI_COLOR_ACCENT);
     UI_DrawText(74, 6, "S", UI_COLOR_BG);
     UI_DrawText(90, 6, score_text, UI_COLOR_BG);
     UI_DrawText(150, 6, "B", UI_COLOR_BG);
