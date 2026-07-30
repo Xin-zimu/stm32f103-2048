@@ -605,6 +605,16 @@
               <FilePath>..\User\game_2048.h</FilePath>
             </File>
             <File>
+              <FileName>game_snake.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\game_snake.c</FilePath>
+            </File>
+            <File>
+              <FileName>game_snake.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\game_snake.h</FilePath>
+            </File>
+            <File>
               <FileName>page_game.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\User\page_game.c</FilePath>
@@ -623,6 +633,16 @@
               <FileName>page_pause.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\User\page_pause.h</FilePath>
+            </File>
+            <File>
+              <FileName>page_snake.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\page_snake.c</FilePath>
+            </File>
+            <File>
+              <FileName>page_snake.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\page_snake.h</FilePath>
             </File>
             <File>
               <FileName>page_settings.c</FileName>

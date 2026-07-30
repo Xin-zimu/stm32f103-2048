@@ -3,6 +3,7 @@
 #include "page_info.h"
 #include "page_game.h"
 #include "page_pause.h"
+#include "page_snake.h"
 #include "page_settings.h"
 #include "ui_dirty.h"
 #include "ui_draw.h"
@@ -13,6 +14,7 @@ static const UI_PageOps * const UI_PAGES[UI_PAGE_COUNT] =
 {
     &PAGE_HOME_OPS,
     &PAGE_GAME_OPS,
+    &PAGE_SNAKE_OPS,
     &PAGE_PAUSE_OPS,
     &PAGE_SETTINGS_OPS,
     &PAGE_INFO_OPS
@@ -198,8 +200,8 @@ UI_PageId UI_PageGetCurrent(void)
  * Dispatch one UI event with global priority.
  *
  * SYSTEM_RESET, HOME, SETTINGS, and BACK are handled before page-local event
- * handlers so those commands remain consistent. SETTINGS opens PAUSE from GAME
- * and opens SETTINGS from the other pages.
+ * handlers so those commands remain consistent. SETTINGS opens PAUSE from GAME,
+ * toggles Snake pause through its page handler, and opens SETTINGS elsewhere.
  *
  * Parameters:
  * event: Logical event to process.
@@ -231,11 +233,17 @@ void UI_PageDispatchEvent(const UI_Event *event)
             if (g_ui_current_page == UI_PAGE_GAME)
             {
                 UI_PageGoto(UI_PAGE_PAUSE);
+                break;
             }
-            else
+            if (g_ui_current_page == UI_PAGE_SNAKE)
             {
-                UI_PageGoto(UI_PAGE_SETTINGS);
+                if (UI_PAGES[g_ui_current_page]->on_event != 0)
+                {
+                    UI_PAGES[g_ui_current_page]->on_event(event);
+                }
+                break;
             }
+            UI_PageGoto(UI_PAGE_SETTINGS);
             break;
 
         case UI_EVENT_BACK:
