@@ -12,11 +12,14 @@
 #define PAGE_GAME_BOARD_SIZE      176      // Full board area including gaps.
 #define PAGE_GAME_INPUT_THROTTLE   90U     // Minimum time between direction attempts.
 #define PAGE_GAME_RESTART_GUARD   300U     // Minimum time between OK restarts.
+#define PAGE_GAME_NEW_FLASH_MS    140U     // New tile highlight duration.
 #define TEXT_GAME_TITLE          "2048"
 #define TEXT_FOOTER_GAME         "JOY MOVE  OK NEW  RST BACK"
 
 static uint8_t g_page_game_initialized = 0U;
 static uint8_t g_page_game_input_locked = 0U;
+static uint16_t g_page_game_new_flash_mask = 0U;
+static uint32_t g_page_game_new_flash_until_ms = 0U;
 static uint32_t g_page_game_last_input_ms = 0U;
 static uint32_t g_page_game_last_restart_ms = 0U;
 static uint32_t g_page_game_draw_now = 0U;
@@ -197,6 +200,42 @@ static void Page_Game_InvalidateChangedCells(uint16_t mask)
             UI_PageInvalidate(&span);
         }
     }
+}
+
+/*
+ * Start the short visual feedback for a generated tile.
+ *
+ * If a previous new-tile highlight is still visible, its mask is returned so
+ * the caller can merge that cleanup with the normal changed-cell redraw. This
+ * keeps board dirty work bounded to row spans instead of adding separate
+ * cleanup rectangles.
+ *
+ * Parameters:
+ * mask: Sixteen-bit mask containing the generated tile.
+ * now: Timestamp of the move that generated the tile.
+ *
+ * Return value:
+ * Previous active new-tile mask that should be redrawn normally.
+ *
+ * Side effects:
+ * Updates flash state.
+ */
+static uint16_t Page_Game_StartNewTileFeedback(uint16_t mask, uint32_t now)
+{
+    uint16_t old_mask;
+
+    old_mask = g_page_game_new_flash_mask;
+    g_page_game_new_flash_mask = mask;
+    if (mask != 0U)
+    {
+        g_page_game_new_flash_until_ms = now + PAGE_GAME_NEW_FLASH_MS;
+    }
+    else
+    {
+        g_page_game_new_flash_until_ms = 0U;
+    }
+
+    return old_mask;
 }
 
 /*
@@ -445,16 +484,30 @@ static void Page_Game_DrawCell(uint8_t row, uint8_t col)
     UI_Rect rect;
     char tile_text[6];
     uint8_t exponent;
+    uint8_t flash_active;
     uint16_t fill;
     uint16_t text_color;
 
     rect = Page_Game_GetCellRect(row, col);
     exponent = Game2048_GetCell(row, col);
+    flash_active = ((g_page_game_new_flash_mask &
+        (uint16_t)(1U << ((row * 4U) + col))) != 0U) ? 1U : 0U;
     fill = Page_Game_GetTileColor(exponent);
     text_color = (exponent <= 2U) ? UI_COLOR_BG : UI_COLOR_TEXT;
 
     UI_DrawRect(rect.x, rect.y, rect.w, rect.h, fill);
-    UI_DrawFrame(rect.x, rect.y, rect.w, rect.h, UI_COLOR_DIM);
+    UI_DrawFrame(rect.x, rect.y, rect.w, rect.h,
+        (flash_active != 0U) ? UI_COLOR_WARN : UI_COLOR_DIM);
+    if (flash_active != 0U)
+    {
+        UI_DrawFrame(
+            (int16_t)(rect.x + 1),
+            (int16_t)(rect.y + 1),
+            (int16_t)(rect.w - 2),
+            (int16_t)(rect.h - 2),
+            UI_COLOR_WARN
+        );
+    }
     Page_Game_FormatTile(exponent, tile_text, (uint8_t)sizeof(tile_text));
     Page_Game_DrawTextCentered(&rect, tile_text, text_color);
 }
@@ -546,6 +599,8 @@ static void Page_Game_DrawStateOverlay(void)
 static void Page_Game_Restart(uint32_t seed)
 {
     Game2048_Restart(seed);
+    g_page_game_new_flash_mask = 0U;
+    g_page_game_new_flash_until_ms = 0U;
     g_page_game_last_input_ms = seed;
     g_page_game_last_restart_ms = seed;
     g_page_game_input_locked = 1U;
@@ -587,10 +642,19 @@ void Page_Game_RestartFromMenu(uint32_t seed)
  */
 static void Page_Game_OnEnter(void)
 {
+    uint32_t now;
+
+    now = Timing_GetTick();
     if (g_page_game_initialized == 0U)
     {
-        Game2048_Init(Timing_GetTick());
+        Game2048_Init(now);
         g_page_game_initialized = 1U;
+    }
+    if ((g_page_game_new_flash_mask != 0U) &&
+        ((int32_t)(now - g_page_game_new_flash_until_ms) >= 0))
+    {
+        g_page_game_new_flash_mask = 0U;
+        g_page_game_new_flash_until_ms = 0U;
     }
     g_page_game_input_locked = 1U;
 }
@@ -618,6 +682,8 @@ static void Page_Game_OnEvent(const UI_Event *event)
     Game2048_Direction dir;
     uint32_t score_before;
     uint32_t best_before;
+    uint16_t old_flash_mask;
+    uint16_t redraw_mask;
     uint8_t has_dir;
 
     if (event == 0)
@@ -689,12 +755,17 @@ static void Page_Game_OnEvent(const UI_Event *event)
     if (Game2048_Move(dir) != 0U)
     {
         g_page_game_input_locked = 1U;
+        old_flash_mask = Page_Game_StartNewTileFeedback(
+            Game2048_GetLastNewTileMask(),
+            event->timestamp
+        );
         if ((Game2048_GetScore() != score_before) ||
             (Game2048_GetBestScore() != best_before))
         {
             Page_Game_InvalidateScore();
         }
-        Page_Game_InvalidateChangedCells(Game2048_GetLastChangeMask());
+        redraw_mask = (uint16_t)(Game2048_GetLastChangeMask() | old_flash_mask);
+        Page_Game_InvalidateChangedCells(redraw_mask);
         if (Game2048_GetState() != GAME2048_STATE_PLAYING)
         {
             Page_Game_InvalidateOverlay();
@@ -722,6 +793,15 @@ static void Page_Game_OnEvent(const UI_Event *event)
 static void Page_Game_Task(uint32_t now)
 {
     g_page_game_draw_now = now;
+    if ((g_page_game_new_flash_mask != 0U) &&
+        ((int32_t)(now - g_page_game_new_flash_until_ms) >= 0))
+    {
+        Page_Game_InvalidateChangedCells(g_page_game_new_flash_mask);
+        g_page_game_new_flash_mask = 0U;
+        g_page_game_new_flash_until_ms = 0U;
+        g_page_game_input_locked = 1U;
+        return;
+    }
     g_page_game_input_locked = 0U;
 }
 

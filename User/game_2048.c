@@ -9,6 +9,7 @@ static uint32_t g_game2048_score = 0U;
 static uint32_t g_game2048_best_score = 0U;
 static uint32_t g_game2048_rng_state = 1U;
 static uint16_t g_game2048_last_change_mask = 0U;
+static uint16_t g_game2048_last_new_tile_mask = 0U;
 static Game2048_State g_game2048_state = GAME2048_STATE_PLAYING;
 
 /*
@@ -106,20 +107,20 @@ static uint8_t Game2048_CountEmpty(void)
  *
  * A target empty-cell ordinal is chosen first, then the board is scanned in a
  * stable order until that empty slot is reached. This avoids allocating a list
- * of empty coordinates. New tiles follow normal 2048 odds: 90 percent 2 and
- * 10 percent 4.
+ * of empty coordinates. New tiles follow normal 2048 odds. When requested, the
+ * tile location is recorded for short visual feedback on the GAME page.
  *
  * Parameters:
- * None.
+ * track_new_tile: Nonzero to record the generated tile in the new-tile mask.
  *
  * Return value:
  * 1: A tile was added.
  * 0: The board was already full.
  *
  * Side effects:
- * Writes one board cell and advances the RNG.
+ * Writes one board cell, advances the RNG, and may update the new-tile mask.
  */
-static uint8_t Game2048_AddRandomTile(void)
+static uint8_t Game2048_AddRandomTile(uint8_t track_new_tile)
 {
     uint8_t empty_count;
     uint8_t target;
@@ -147,6 +148,11 @@ static uint8_t Game2048_AddRandomTile(void)
                 if (seen == target)
                 {
                     g_game2048_board[row][col] = value;
+                    if (track_new_tile != 0U)
+                    {
+                        g_game2048_last_new_tile_mask =
+                            (uint16_t)(1U << ((row * GAME2048_SIZE) + col));
+                    }
                     return 1U;
                 }
                 seen++;
@@ -491,11 +497,12 @@ void Game2048_Restart(uint32_t seed)
 
     g_game2048_rng_state = (seed == 0U) ? 1U : seed;
     g_game2048_rng_state ^= 0xA5A55A5AUL;
+    g_game2048_last_new_tile_mask = 0U;
     Game2048_ClearBoard();
 
     for (count = 0U; count < GAME2048_START_TILES; count++)
     {
-        (void)Game2048_AddRandomTile();
+        (void)Game2048_AddRandomTile(0U);
     }
     g_game2048_last_change_mask = 0xFFFFU;
 }
@@ -528,6 +535,7 @@ uint8_t Game2048_Move(Game2048_Direction dir)
     uint32_t score_delta;
 
     g_game2048_last_change_mask = 0U;
+    g_game2048_last_new_tile_mask = 0U;
     if (g_game2048_state != GAME2048_STATE_PLAYING)
     {
         return 0U;
@@ -564,7 +572,7 @@ uint8_t Game2048_Move(Game2048_Direction dir)
         g_game2048_best_score = g_game2048_score;
     }
 
-    (void)Game2048_AddRandomTile();
+    (void)Game2048_AddRandomTile(1U);
     if (Game2048_CheckWin() != 0U)
     {
         g_game2048_state = GAME2048_STATE_WIN;
@@ -684,6 +692,27 @@ uint32_t Game2048_GetBestScore(void)
 uint16_t Game2048_GetLastChangeMask(void)
 {
     return g_game2048_last_change_mask;
+}
+
+/*
+ * Read the new-tile mask produced by the last successful move.
+ *
+ * Only the random tile generated after a valid move is reported. Initial
+ * restart tiles are not reported so entering or restarting the game does not
+ * play a misleading new-tile flash on a full-page redraw.
+ *
+ * Parameters:
+ * None.
+ *
+ * Return value:
+ * Sixteen-bit mask containing the most recently generated tile, or zero.
+ *
+ * Side effects:
+ * None.
+ */
+uint16_t Game2048_GetLastNewTileMask(void)
+{
+    return g_game2048_last_new_tile_mask;
 }
 
 /*
