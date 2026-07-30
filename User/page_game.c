@@ -14,7 +14,8 @@
 #define PAGE_GAME_RESTART_GUARD   300U     // Minimum time between OK restarts.
 #define PAGE_GAME_NEW_FLASH_MS    220U     // New tile highlight duration.
 #define PAGE_GAME_MERGE_FLASH_MS  180U     // Merge target highlight duration.
-#define TEXT_FOOTER_GAME         "JOY MOVE  OK NEW  RST BACK"
+#define TEXT_FOOTER_GAME_PLAY    "JOY MOVE  OK NEW  SET PAUSE"
+#define TEXT_FOOTER_GAME_END     "OK NEW  SET MENU  RST BACK"
 
 static uint8_t g_page_game_initialized = 0U;
 static uint8_t g_page_game_input_locked = 0U;
@@ -611,8 +612,8 @@ static void Page_Game_DrawBoard(void)
  * Draw the end-state overlay.
  *
  * WIN and GAME OVER are drawn over the board with a compact dark band so the
- * current final board remains partly visible around it. The footer still shows
- * the restart and back controls.
+ * current final board remains partly visible around it. WIN includes the active
+ * goal value so short goal modes are understandable at a glance.
  *
  * Parameters:
  * None.
@@ -625,7 +626,9 @@ static void Page_Game_DrawBoard(void)
  */
 static void Page_Game_DrawStateOverlay(void)
 {
+    char win_text[10];
     Game2048_State state;
+    int16_t text_x;
 
     state = Game2048_GetState();
     if (state == GAME2048_STATE_PLAYING)
@@ -637,7 +640,13 @@ static void Page_Game_DrawStateOverlay(void)
     UI_DrawFrame(34, 102, 172, 38, UI_COLOR_ACCENT);
     if (state == GAME2048_STATE_WIN)
     {
-        UI_DrawTextCN(82, 112, "WIN", UI_COLOR_WARN);
+        win_text[0] = 'W';
+        win_text[1] = 'I';
+        win_text[2] = 'N';
+        win_text[3] = ' ';
+        Page_Game_FormatU32(Game2048_GetGoalValue(), &win_text[4], 6U);
+        text_x = (int16_t)(34 + ((172 - Page_Game_TextWidth(win_text, 0U)) / 2));
+        UI_DrawText(text_x, 114, win_text, UI_COLOR_WARN);
     }
     else
     {
@@ -918,7 +927,11 @@ static void Page_Game_Draw(const UI_Rect *clip)
     Page_Game_DrawHeader();
     Page_Game_DrawBoard();
     Page_Game_DrawStateOverlay();
-    UI_DrawFooter(TEXT_FOOTER_GAME);
+    UI_DrawFooter(
+        (Game2048_GetState() == GAME2048_STATE_PLAYING) ?
+        TEXT_FOOTER_GAME_PLAY :
+        TEXT_FOOTER_GAME_END
+    );
 }
 
 const UI_PageOps PAGE_GAME_OPS =
